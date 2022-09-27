@@ -2,9 +2,11 @@
     "name": "Mujoco.Editor",
     "rootNamespace": "",
     "references": [
-        "Mujoco"
+        "Mujoco.Runtime"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": true,
     "overrideReferences": false,

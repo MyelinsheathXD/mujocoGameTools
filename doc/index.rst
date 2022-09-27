@@ -12,6 +12,8 @@
    modeling
    XMLreference
    programming
+   models
    APIreference
+   python
    unity
    changelog
