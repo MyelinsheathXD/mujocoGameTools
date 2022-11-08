@@ -55,7 +55,7 @@ namespace Mujoco {
     private SerializedProperty _fvmax;
 
     public void OnEnable() {
-      _showCustomParams = false;
+      _showCustomParams = true;
       _showDebugValues = false;
       _showDynPrm = false;
       _showGainPrm = false;

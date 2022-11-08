@@ -155,10 +155,14 @@ public class MjScene : MonoBehaviour {
       SaveToFile(sceneMjcf, Path.Combine(Application.temporaryCachePath, settings.DebugFileName));
     }
 
+
     if (!skipCompile) {
       // Compile the scene from the Mjcf.
       CompileScene(sceneMjcf, _orderedComponents);
     }
+
+            //print(sceneMjcf.OuterXml);
+
     return sceneMjcf;
   }
 
