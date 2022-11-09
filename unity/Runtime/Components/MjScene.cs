@@ -35,6 +35,12 @@ public class MjScene : MonoBehaviour {
   public unsafe MujocoLib.mjModel_* Model = null;
   public unsafe MujocoLib.mjData_* Data = null;
 
+        //public unsafe Tuple< MujocoLib.mjModel_*, MujocoLib.mjData_*> extraModelandData;
+        public unsafe MujocoLib.mjModel_*[] extModels;
+        public unsafe MujocoLib.mjData_*[] extData;
+        int DefaultListID = 0;
+
+        public List <int> layersList ;
   // Public and global access to the active MjSceneGenerationContext.
   // Throws an exception if accessed when the scene is not being generated.
   public MjcfGenerationContext GenerationContext {
@@ -75,7 +81,7 @@ public class MjScene : MonoBehaviour {
   private static MjScene _instance = null;
 
   private List<MjComponent> _orderedComponents;
-
+  private List<List<MjComponent>> L_orderedComponents;
   protected unsafe void Start() {
     CreateScene();
   }
@@ -124,7 +130,58 @@ public class MjScene : MonoBehaviour {
     // I briefly explored that approach, but decided against it. It increases the amount of code
     // on the side of the individual components. This solution allows to restrict the code in the
     // components to a bare minimum, at the expense of one extra method here.
-    var hierarchyRoots = FindObjectsOfType<MjComponent>()
+
+    //filters
+    List <List<MjComponent>> listLmjcom=new List<List<MjComponent>>();
+            var hierarchyRootsAll = FindObjectsOfType<MjComponent>();
+            layersList = new List<int>();
+            for (int i = 0; i < hierarchyRootsAll.Length; i++)
+            {
+                int LayerCurrent = hierarchyRootsAll[i].gameObject.layer;
+                bool exists = false;
+                for (int k = 0; k < layersList.Count; k++)
+                {
+                    if (LayerCurrent == layersList[k])
+                    {                      
+                        listLmjcom[k].Add(hierarchyRootsAll[i]);
+                        exists = true;
+                        break;
+                    }
+
+                }
+                if (exists == false)
+                {
+                    layersList.Add(LayerCurrent);
+                    List<MjComponent> compList = new List<MjComponent>();
+                    compList.Add(hierarchyRootsAll[i]);
+                    listLmjcom.Add(compList);
+                }
+            }
+            print("layer count "+ layersList.Count+"eee"+ listLmjcom[0].ToArray().Length);
+            print("layer count "+ layersList.Count+"eee1"+ listLmjcom[1].ToArray().Length);
+
+            //create new layers' vars
+            //int DefaultListID = 0;
+            if (layersList.Count>1)
+            {
+                for (int i = 0; i < layersList.Count; i++)
+                {
+                    if (layersList[i]==0)
+                    {
+                        DefaultListID = i;
+                    }
+                }
+
+                extData = new MujocoLib.mjData_*[layersList.Count];
+                extModels = new MujocoLib.mjModel_*[layersList.Count];
+
+                L_orderedComponents = new List<List<MjComponent>>();
+            }
+            //
+
+
+
+            var hierarchyRoots = listLmjcom[DefaultListID].ToArray()
         .Where(component => MjHierarchyTool.FindParentComponent(component) == null)
         .Select(component => component.transform)
         .Distinct();
@@ -133,7 +190,38 @@ public class MjScene : MonoBehaviour {
       _orderedComponents.AddRange(MjHierarchyTool.LinearizeHierarchyBFS(root));
     }
 
-    XmlDocument sceneMjcf = null;
+            {// list orderedComponents
+                for (int i = 0; i < layersList.Count; i++)
+                {
+
+                    if (i==DefaultListID)
+                    {
+                        L_orderedComponents.Add( new List<MjComponent>());
+                        continue;
+                    }
+
+                    var hierarchyRootsL = listLmjcom[layersList[i]].ToArray()
+                        .Where(component => MjHierarchyTool.FindParentComponent(component) == null)
+                        .Select(component => component.transform)
+                        .Distinct();
+                    //List < MjComponent> orComp = new List<MjComponent>();
+                    L_orderedComponents.Add(new List<MjComponent>());
+                    //L_orderedComponents[i] = new List<MjComponent>();
+                    foreach (var root in hierarchyRootsL)
+                    {
+                        L_orderedComponents[i].AddRange(MjHierarchyTool.LinearizeHierarchyBFS(root));
+                    }
+
+
+                }
+
+
+
+
+            }
+
+    XmlDocument sceneMjcf = null;    
+    List<XmlDocument>LsceneMJcf=new List<XmlDocument> ();
     try {
       _generationContext = new MjcfGenerationContext();
       sceneMjcf = GenerateSceneMjcf(_orderedComponents);
@@ -149,8 +237,49 @@ public class MjScene : MonoBehaviour {
     }
     _generationContext = null;
 
-    // Save the Mjcf to a file for debug purposes.
-    var settings = MjGlobalSettings.Instance;
+
+
+            //{///generate file 
+                for (int i = 0; i < layersList.Count; i++)
+                {
+                    if (layersList[i]==DefaultListID)
+                    {
+
+                        
+                        LsceneMJcf.Add(sceneMjcf);
+                        continue;
+                        
+                    }
+
+
+                    try
+                    {
+                        _generationContext = new MjcfGenerationContext();
+                        XmlDocument sceneMjcf1 = GenerateSceneMjcf(L_orderedComponents[i]);
+                        LsceneMJcf.Add(sceneMjcf1);
+                    }
+                    catch (Exception e)
+                    {
+                        _generationContext = null;
+                        Debug.LogException(e);
+#if UNITY_EDITOR
+                        UnityEditor.EditorApplication.isPlaying = false;
+#else
+      Application.Quit();
+#endif
+                        throw;
+                    }
+                    _generationContext = null;
+
+                }
+
+
+
+
+            //}
+
+            // Save the Mjcf to a file for debug purposes.
+            var settings = MjGlobalSettings.Instance;
     if (settings && !string.IsNullOrEmpty(settings.DebugFileName)) {
       SaveToFile(sceneMjcf, Path.Combine(Application.temporaryCachePath, settings.DebugFileName));
     }
@@ -158,7 +287,8 @@ public class MjScene : MonoBehaviour {
 
     if (!skipCompile) {
       // Compile the scene from the Mjcf.
-      CompileScene(sceneMjcf, _orderedComponents);
+      CompileScene(sceneMjcf, _orderedComponents,LsceneMJcf,L_orderedComponents);
+
     }
 
             //print(sceneMjcf.OuterXml);
@@ -167,7 +297,7 @@ public class MjScene : MonoBehaviour {
   }
 
   private unsafe void CompileScene(
-      XmlDocument mjcf, IEnumerable<MjComponent> components) {
+      XmlDocument mjcf, IEnumerable<MjComponent> components, List<XmlDocument>Lmjcf,List<List<MjComponent>>Lcomponents) {
     Model = MjEngineTool.LoadModelFromString(mjcf.OuterXml);
     if (Model == null) {
       throw new NullReferenceException("Failed to create Mujoco runtime model.");
@@ -182,6 +312,37 @@ public class MjScene : MonoBehaviour {
     foreach (var component in components) {
       component.BindToRuntime(Model, Data);
     }
+
+            for (int i = 0; i < layersList.Count; i++)
+            {
+                if (layersList[i]== DefaultListID)
+                {
+                    continue;
+                }
+
+
+                extModels[i] = MjEngineTool.LoadModelFromString(Lmjcf[i].OuterXml);
+                if (extModels[i] == null)
+                {
+                    throw new NullReferenceException("Failed to create Mujoco runtime model.");
+                }
+                else
+                {
+                    extData[i] = MujocoLib.mj_makeData(extModels[i]);
+                }
+                if (extData[i] == null)
+                {
+                    throw new NullReferenceException("Failed to create Mujoco runtime data.");
+                }
+
+                // Bind the components to their Mujoco counterparts.
+                foreach (var component in Lcomponents[i])
+                {
+                    component.BindToRuntime(extModels[i], extData[i]);
+                }
+
+            }
+
   }
 
   public unsafe void SyncUnityToMjState() {
@@ -190,6 +351,21 @@ public class MjScene : MonoBehaviour {
         component.OnSyncState(Data);
       }
     }
+            for (int i = 0; i < layersList.Count; i++)
+            {
+                if (i==DefaultListID)
+                {
+                    continue;
+                }
+                foreach (var component in L_orderedComponents[i])
+                {
+                    if (component != null && component.isActiveAndEnabled)
+                    {
+                        component.OnSyncState(extData[i]);
+                    }
+                }
+
+            }
   }
 
   // This must be called after every change in the Unity scene during runtime, in order to keep the
@@ -319,6 +495,19 @@ public class MjScene : MonoBehaviour {
     Profiler.BeginSample("MjStep");
     Profiler.BeginSample("MjStep.mj_step");
     MujocoLib.mj_step(Model, Data);
+
+            //{
+                for (int i = 0; i < layersList.Count; i++)
+                {
+                    if (i==DefaultListID)
+                    {
+                        continue;
+                    }
+
+                    MujocoLib.mj_step(extModels[i], extData[i]);
+                }
+
+            //}
     Profiler.EndSample(); // MjStep.mj_step
     CheckForPhysicsException();
 
