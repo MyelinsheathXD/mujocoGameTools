@@ -157,11 +157,7 @@ public class MjScene : MonoBehaviour {
                     listLmjcom.Add(compList);
                 }
             }
-            print("layer count "+ layersList.Count+"eee"+ listLmjcom[0].ToArray().Length);
-            print("layer count "+ layersList.Count+"eee1"+ listLmjcom[1].ToArray().Length);
 
-            //create new layers' vars
-            //int DefaultListID = 0;
             if (layersList.Count>1)
             {
                 for (int i = 0; i < layersList.Count; i++)
@@ -428,10 +424,24 @@ public class MjScene : MonoBehaviour {
     MujocoLib.mj_kinematics(Model, Data);
     SyncUnityToMjState();
 
-    // Delete previous model, data
-    DestroyScene();
-    // Create a new MJCF and new model+data, indices may be different
-    CreateScene();
+            // Delete previous model, data
+            //DestroyScene();
+
+
+            //specific destroy
+            if (Model != null)
+            {
+                MujocoLib.mj_deleteModel(Model);
+                Model = null;
+            }
+            if (Data != null)
+            {
+                MujocoLib.mj_deleteData(Data);
+                Data = null;
+            }
+
+            // Create a new MJCF and new model+data, indices may be different
+            CreateScene();
 
     // for joints that persisted, set state of the new MuJoCo scene according to the cached state
     foreach (var joint in joints) {
@@ -474,6 +484,133 @@ public class MjScene : MonoBehaviour {
     }
     // update mj transforms:
     MujocoLib.mj_kinematics(Model, Data);
+
+
+            //
+            for (int i = 0; i < layersList.Count; i++)
+            {
+                if (DefaultListID == layersList[i])
+                {
+                    continue;
+                }
+
+                var joints1 = FindObjectsOfType<MjBaseJoint>();
+                var positions1 = new Dictionary<MjBaseJoint, double[]>();
+                var velocities1 = new Dictionary<MjBaseJoint, double[]>();
+                foreach (var joint in joints1)
+                {
+                    if (joint.QposAddress > -1)
+                    { // newly added components shouldn't be cached
+                        switch (extModels[i]->jnt_type[joint.MujocoId])
+                        {
+                            default:
+                            case (int)MujocoLib.mjtJoint.mjJNT_HINGE:
+                            case (int)MujocoLib.mjtJoint.mjJNT_SLIDE:
+                                positions1[joint] = new double[] { extData[i]->qpos[joint.QposAddress] };
+                                velocities1[joint] = new double[] { extData[i]->qvel[joint.DofAddress] };
+                                break;
+                            case (int)MujocoLib.mjtJoint.mjJNT_BALL:
+                                positions1[joint] = new double[] {
+                extData[i]->qpos[joint.QposAddress],
+                extData[i]->qpos[joint.QposAddress+1],
+                extData[i]->qpos[joint.QposAddress+2],
+                extData[i]->qpos[joint.QposAddress+3]};
+                                velocities1[joint] = new double[] {
+                extData[i]->qvel[joint.DofAddress],
+                extData[i]->qvel[joint.DofAddress+1],
+                extData[i]->qvel[joint.DofAddress+2]};
+                                break;
+                            case (int)MujocoLib.mjtJoint.mjJNT_FREE:
+                                positions1[joint] = new double[] {
+                extData[i]->qpos[joint.QposAddress],
+                extData[i]->qpos[joint.QposAddress+1],
+                extData[i]->qpos[joint.QposAddress+2],
+                extData[i]->qpos[joint.QposAddress+3],
+                extData[i]->qpos[joint.QposAddress+4],
+                extData[i]->qpos[joint.QposAddress+5],
+                extData[i]->qpos[joint.QposAddress+6]};
+                                velocities1[joint] = new double[] {
+                extData[i]->qvel[joint.DofAddress],
+                extData[i]->qvel[joint.DofAddress+1],
+                extData[i]->qvel[joint.DofAddress+2],
+                extData[i]->qvel[joint.DofAddress+3],
+                extData[i]->qvel[joint.DofAddress+4],
+                extData[i]->qvel[joint.DofAddress+5]};
+                                break;
+                        }
+                    }
+                }
+
+                // update unity transforms according to qpos0, so they're ready to create the new MJCF
+                MujocoLib.mj_resetData(extModels[i], extData[i]);
+                MujocoLib.mj_kinematics(extModels[i], extData[i]);
+                SyncUnityToMjState();
+
+                // Delete previous model, data
+                //DestroyScene();
+
+                if (extModels[i] != null)
+                {
+                    MujocoLib.mj_deleteModel(extModels[i]);
+                    extModels[i] = null;
+                }
+                if (extData[i] != null)
+                {
+                    MujocoLib.mj_deleteData(extData[i]);
+                    extData[i] = null;
+                }
+                // Create a new MJCF and new model+data, indices may be different
+                CreateScene();
+
+                // for joints that persisted, set state of the new MuJoCo scene according to the cached state
+                foreach (var joint in joints1)
+                {
+                    try
+                    {
+                        var position = positions1[joint]; // this will fail for new joints, hence try/catch
+                        var velocity = velocities1[joint];
+                        switch (extModels[i]->jnt_type[joint.MujocoId])
+                        {
+                            default:
+                            case (int)MujocoLib.mjtJoint.mjJNT_HINGE:
+                            case (int)MujocoLib.mjtJoint.mjJNT_SLIDE:
+                                extData[i]->qpos[joint.QposAddress] = position[0];
+                                extData[i]->qvel[joint.DofAddress] = velocity[0];
+                                break;
+                            case (int)MujocoLib.mjtJoint.mjJNT_BALL:
+                                extData[i]->qpos[joint.QposAddress] = position[0];
+                                extData[i]->qpos[joint.QposAddress + 1] = position[1];
+                                extData[i]->qpos[joint.QposAddress + 2] = position[2];
+                                extData[i]->qpos[joint.QposAddress + 3] = position[3];
+                                extData[i]->qvel[joint.DofAddress] = velocity[0];
+                                extData[i]->qvel[joint.DofAddress + 1] = velocity[1];
+                                extData[i]->qvel[joint.DofAddress + 2] = velocity[2];
+                                break;
+                            case (int)MujocoLib.mjtJoint.mjJNT_FREE:
+                                extData[i]->qpos[joint.QposAddress] = position[0];
+                                extData[i]->qpos[joint.QposAddress + 1] = position[1];
+                                extData[i]->qpos[joint.QposAddress + 2] = position[2];
+                                extData[i]->qpos[joint.QposAddress + 3] = position[3];
+                                extData[i]->qpos[joint.QposAddress + 4] = position[4];
+                                extData[i]->qpos[joint.QposAddress + 5] = position[5];
+                                extData[i]->qpos[joint.QposAddress + 6] = position[6];
+                                extData[i]->qvel[joint.DofAddress] = velocity[0];
+                                extData[i]->qvel[joint.DofAddress + 1] = velocity[1];
+                                extData[i]->qvel[joint.DofAddress + 2] = velocity[2];
+                                extData[i]->qvel[joint.DofAddress + 3] = velocity[3];
+                                extData[i]->qvel[joint.DofAddress + 4] = velocity[4];
+                                extData[i]->qvel[joint.DofAddress + 5] = velocity[5];
+                                break;
+                        }
+                    }
+                    catch { }
+                }
+                // update mj transforms:
+                MujocoLib.mj_kinematics(extModels[i], extData[i]);
+
+
+            }
+            //
     SyncUnityToMjState();
   }
 
@@ -487,6 +624,25 @@ public class MjScene : MonoBehaviour {
       MujocoLib.mj_deleteData(Data);
       Data = null;
     }
+
+            for (int i = 0; i < layersList.Count; i++)
+            {
+                if (DefaultListID == layersList[i])
+                {
+                    continue;
+                }
+                if (extModels[i] != null)
+                {
+                    MujocoLib.mj_deleteModel(extModels[i]);
+                    extModels[i] = null;
+                }
+                if (extData[i] != null)
+                {
+                    MujocoLib.mj_deleteData(extData[i]);
+                    extData[i] = null;
+                }
+
+            }
   }
 
   // Updates the scene and the state of Mujoco simulation.
@@ -552,6 +708,55 @@ public class MjScene : MonoBehaviour {
       Data->warning7.number = 0;
       throw new PhysicsRuntimeException("BADCTRL: NaN/inf in ctrl.");
     }
+
+            for (int i = 0; i < layersList.Count; i++)
+            {
+                if (DefaultListID == layersList[i])
+                {
+                    continue;
+                }
+                if (extData[i]->warning0.number > 0)
+                {
+                    extData[i]->warning0.number = 0;
+                    throw new PhysicsRuntimeException("INERTIA: (Near-) Singular inertia matrix.");
+                }
+                if (extData[i]->warning1.number > 0)
+                {
+                    extData[i]->warning1.number = 0;
+                    throw new PhysicsRuntimeException($"CONTACTFULL: nconmax {Model->nconmax} isn't sufficient.");
+                }
+                if (extData[i]->warning2.number > 0)
+                {
+                    extData[i]->warning2.number = 0;
+                    throw new PhysicsRuntimeException("CNSTRFULL: njmax {Model.njmax} isn't sufficient.");
+                }
+                if (extData[i]->warning3.number > 0)
+                {
+                    extData[i]->warning3.number = 0;
+                    throw new PhysicsRuntimeException("VGEOMFULL: who constructed a mjvScene?!");
+                }
+                if (extData[i]->warning4.number > 0)
+                {
+                    extData[i]->warning4.number = 0;
+                    throw new PhysicsRuntimeException("BADQPOS: NaN/inf in qpos.");
+                }
+                if (extData[i]->warning5.number > 0)
+                {
+                    extData[i]->warning5.number = 0;
+                    throw new PhysicsRuntimeException("BADQVEL: NaN/inf in qvel.");
+                }
+                if (extData[i]->warning6.number > 0)
+                {
+                    extData[i]->warning6.number = 0;
+                    throw new PhysicsRuntimeException("BADQACC: NaN/inf in qacc.");
+                }
+                if (extData[i]->warning7.number > 0)
+                {
+                    extData[i]->warning7.number = 0;
+                    throw new PhysicsRuntimeException("BADCTRL: NaN/inf in ctrl.");
+                }
+
+            }
   }
 
   // Generate a Mujoco scene description using the specified components.
