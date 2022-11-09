@@ -107,6 +107,8 @@ namespace Mujoco {
           body != null ? body.transform.position : Vector3.zero;
       var scene = MjScene.Instance;
 
+            int bodyLayer = body.gameObject.layer;
+
       switch (currentEvent.type) {
         case EventType.MouseDown:
           if (EditorWindow.mouseOverWindow == UnityEditor.EditorWindow.GetWindow<SceneView>()) {
@@ -136,9 +138,14 @@ namespace Mujoco {
             GUIUtility.hotControl = 0;
             currentEvent.Use();
             // as opposed to unity's addforce, xfrc_applied is persistent
-            scene.Data->xfrc_applied[6*body.MujocoId + 0] = 0;
+            /*scene.Data->xfrc_applied[6*body.MujocoId + 0] = 0;
             scene.Data->xfrc_applied[6*body.MujocoId + 1] = 0;
-            scene.Data->xfrc_applied[6*body.MujocoId + 2] = 0;
+            scene.Data->xfrc_applied[6*body.MujocoId + 2] = 0;*/
+
+
+            scene.extData[bodyLayer]->xfrc_applied[6*body.MujocoId + 0] = 0;
+            scene.extData[bodyLayer]->xfrc_applied[6*body.MujocoId + 1] = 0;
+            scene.extData[bodyLayer]->xfrc_applied[6*body.MujocoId + 2] = 0;
           }
           return;
 
@@ -157,7 +164,8 @@ namespace Mujoco {
             double[] mjBodyVel = new double[6];
             fixed (double* res = mjBodyVel) {
               MujocoLib.mj_objectVelocity(
-                  scene.Model, scene.Data, (int)MujocoLib.mjtObj.mjOBJ_BODY, body.MujocoId, res, 0);
+                  //scene.Model, scene.Data, (int)MujocoLib.mjtObj.mjOBJ_BODY, body.MujocoId, res, 0);
+                  scene.extModels[bodyLayer], scene.extData[bodyLayer], (int)MujocoLib.mjtObj.mjOBJ_BODY, body.MujocoId, res, 0);
               // linear velocity is in the last 3 entries
               bodyVel = MjEngineTool.UnityVector3(res, 1);
             }
@@ -169,13 +177,18 @@ namespace Mujoco {
             }
 
             Vector3 delta = _mouseDragCurrentPoint - bodyPosition;
-            float mass = 1.0f / (float)scene.Model->body_invweight0[2*body.MujocoId];
+            //float mass = 1.0f / (float)scene.Model->body_invweight0[2*body.MujocoId];
+            float mass = 1.0f / (float)scene.extModels[bodyLayer]->body_invweight0[2*body.MujocoId];
             Vector3 unityForce = delta * springStiffness * mass;
             unityForce -= bodyVel * Mathf.Sqrt(springStiffness) * mass;
             Vector3 mjForce = MjEngineTool.MjVector3(unityForce);
-            scene.Data->xfrc_applied[6*body.MujocoId + 0] = mjForce.x;
+           /* scene.Data->xfrc_applied[6*body.MujocoId + 0] = mjForce.x;
             scene.Data->xfrc_applied[6*body.MujocoId + 1] = mjForce.y;
-            scene.Data->xfrc_applied[6*body.MujocoId + 2] = mjForce.z;
+            scene.Data->xfrc_applied[6*body.MujocoId + 2] = mjForce.z;*/
+
+            scene.extData[bodyLayer]->xfrc_applied[6*body.MujocoId + 0] = mjForce.x;
+            scene.extData[bodyLayer]->xfrc_applied[6*body.MujocoId + 1] = mjForce.y;
+            scene.extData[bodyLayer]->xfrc_applied[6*body.MujocoId + 2] = mjForce.z;
 
             // Draw and immediately force a repaint.
             DrawMouseSpringGui(body.transform.position, delta, sceneCamera);

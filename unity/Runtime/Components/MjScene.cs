@@ -317,6 +317,8 @@ public class MjScene : MonoBehaviour {
             {
                 if (layersList[i]== DefaultListID)
                 {
+                    extModels[i] = Model;
+                    extData[i] = Data;
                     continue;
                 }
 
